@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Redirect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Checkbox from '../components/Checkbox';
 import FocusDial, { DIAL_MAX_MINUTES } from '../components/FocusDial';
+import SteamingCup from '../components/SteamingCup';
 import { useTasks } from '../state/TasksContext';
 import { colors } from '../theme/colors';
+import { formatMinutes } from '../utils/date';
 
 type Phase = 'setup' | 'running' | 'paused' | 'finished';
 
@@ -29,6 +31,7 @@ export default function FocusScreen({ taskId }: { taskId: string }) {
   const [minutes, setMinutes] = useState(task?.minutes ?? 25);
   const [phase, setPhase] = useState<Phase>('setup');
   const [remaining, setRemaining] = useState(minutes * 60);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const endsAt = useRef(0);
 
   useEffect(() => {
@@ -69,28 +72,58 @@ export default function FocusScreen({ taskId }: { taskId: string }) {
     goBack();
   };
 
-  const toggleFromSheet = () => {
+  const toggleDone = () => {
     toggleTask(task.id);
     if (!task.done) goBack();
   };
 
   const inSetup = phase === 'setup';
   const progress = inSetup ? minutes / DIAL_MAX_MINUTES : remaining / (DIAL_MAX_MINUTES * 60);
+  const timeLabel = inSetup
+    ? `${minutes} min`
+    : phase === 'finished'
+      ? "Time's up"
+      : `${formatClock(remaining)} left`;
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-        {inSetup && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back to Today"
-            hitSlop={10}
-            onPress={goBack}
-            style={({ pressed }) => [styles.back, pressed && styles.pressed]}
-          >
-            <Feather name="chevron-left" size={20} color={colors.textSecondary} />
-            <Text style={styles.backText}>Today</Text>
-          </Pressable>
+    <View style={[styles.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]}>
+      <View style={styles.taskBar}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${task.title}, ${detailsOpen ? 'hide' : 'show'} details`}
+          accessibilityState={{ expanded: detailsOpen }}
+          onPress={() => setDetailsOpen((open) => !open)}
+          style={styles.taskBarHeader}
+        >
+          <Text style={[styles.taskTitle, task.done && styles.taskTitleDone]} numberOfLines={1}>
+            {task.title}
+          </Text>
+          <MaterialCommunityIcons
+            name={detailsOpen ? 'chevron-double-up' : 'chevron-double-down'}
+            size={22}
+            color={colors.textSecondary}
+          />
+        </Pressable>
+
+        {detailsOpen && (
+          <View style={styles.details}>
+            <Text style={styles.detailText}>
+              {task.kind === 'schedule' ? 'Scheduled today' : 'Anytime this week'} ·{' '}
+              {formatMinutes(task.minutes)} focus
+            </Text>
+            <View style={styles.detailRow}>
+              <Checkbox checked={task.done} label={`Mark ${task.title} done`} onToggle={toggleDone} />
+              <Text style={styles.detailRowText}>Mark done</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={goBack}
+              style={({ pressed }) => [styles.backLink, pressed && styles.pressed]}
+            >
+              <Feather name="chevron-left" size={18} color={colors.accent} />
+              <Text style={styles.backLinkText}>Back to your week</Text>
+            </Pressable>
+          </View>
         )}
       </View>
 
@@ -99,21 +132,21 @@ export default function FocusScreen({ taskId }: { taskId: string }) {
           progress={progress}
           minutes={minutes}
           onChangeMinutes={inSetup ? setMinutes : undefined}
+          running={phase === 'running'}
         >
-          <Text style={styles.time}>{inSetup ? minutes : formatClock(remaining)}</Text>
-          <Text style={styles.timeLabel}>
-            {inSetup ? 'minutes' : phase === 'finished' ? "time's up" : 'left'}
-          </Text>
+          <SteamingCup steaming={phase === 'running'} />
+          <Text style={styles.time}>{timeLabel}</Text>
         </FocusDial>
+        {inSetup && <Text style={styles.dragHint}>Drag the dial to change the time</Text>}
 
         <View style={styles.controls}>
           {phase === 'setup' && (
             <Pressable
               accessibilityRole="button"
               onPress={start}
-              style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.pill, styles.pillPrimary, pressed && styles.pressed]}
             >
-              <Text style={styles.primaryText}>Start focus</Text>
+              <Text style={[styles.pillText, styles.pillPrimaryText]}>Start focus</Text>
             </Pressable>
           )}
 
@@ -122,16 +155,16 @@ export default function FocusScreen({ taskId }: { taskId: string }) {
               <Pressable
                 accessibilityRole="button"
                 onPress={phase === 'running' ? pause : resume}
-                style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.pill, styles.pillSoft, pressed && styles.pressed]}
               >
-                <Text style={styles.secondaryText}>{phase === 'running' ? 'Pause' : 'Resume'}</Text>
+                <Text style={styles.pillText}>{phase === 'running' ? 'Pause' : 'Resume'}</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
                 onPress={end}
-                style={({ pressed }) => [styles.textButton, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.pill, styles.pillOutline, pressed && styles.pressed]}
               >
-                <Text style={styles.textButtonLabel}>End</Text>
+                <Text style={styles.pillText}>End</Text>
               </Pressable>
             </>
           )}
@@ -141,29 +174,19 @@ export default function FocusScreen({ taskId }: { taskId: string }) {
               <Pressable
                 accessibilityRole="button"
                 onPress={completeTask}
-                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.pill, styles.pillPrimary, pressed && styles.pressed]}
               >
-                <Text style={styles.primaryText}>Mark done</Text>
+                <Text style={[styles.pillText, styles.pillPrimaryText]}>Mark done</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
                 onPress={end}
-                style={({ pressed }) => [styles.textButton, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.pill, styles.pillOutline, pressed && styles.pressed]}
               >
-                <Text style={styles.textButtonLabel}>Not yet</Text>
+                <Text style={styles.pillText}>Not yet</Text>
               </Pressable>
             </>
           )}
-        </View>
-      </View>
-
-      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
-        <View style={styles.handle} />
-        <View style={styles.sheetRow}>
-          <Checkbox checked={task.done} label={task.title} onToggle={toggleFromSheet} />
-          <Text style={[styles.sheetTitle, task.done && styles.sheetTitleDone]} numberOfLines={2}>
-            {task.title}
-          </Text>
         </View>
       </View>
     </View>
@@ -174,20 +197,62 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  header: {
     paddingHorizontal: 20,
-    minHeight: 60,
   },
-  back: {
+  taskBar: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.rule,
+  },
+  taskBarHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  taskTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  taskTitleDone: {
+    color: colors.placeholder,
+    textDecorationLine: 'line-through',
+  },
+  details: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.divider,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 14,
+    gap: 12,
+  },
+  detailText: {
+    fontSize: 15,
+    color: colors.textSecondary,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  detailRowText: {
+    fontSize: 16,
+    color: colors.textPrimary,
+  },
+  backLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
     alignSelf: 'flex-start',
   },
-  backText: {
-    fontSize: 17,
-    color: colors.textSecondary,
+  backLinkText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: colors.accent,
   },
   body: {
     flex: 1,
@@ -196,88 +261,47 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   time: {
-    fontSize: 56,
+    marginTop: 8,
+    fontSize: 17,
     fontWeight: '600',
     color: colors.textPrimary,
     fontVariant: ['tabular-nums'],
-    letterSpacing: -1,
   },
-  timeLabel: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    marginTop: 2,
+  dragHint: {
+    marginTop: 14,
+    fontSize: 14,
+    color: colors.placeholder,
   },
   controls: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    alignSelf: 'stretch',
     gap: 12,
-    marginTop: 48,
-    minHeight: 52,
+    paddingHorizontal: 12,
+    marginTop: 40,
   },
-  primaryButton: {
-    backgroundColor: colors.accent,
+  pill: {
     borderRadius: 999,
-    paddingHorizontal: 40,
-    paddingVertical: 15,
-  },
-  primaryText: {
-    fontSize: 17,
-    fontWeight: '500',
-    color: colors.surface,
-  },
-  secondaryButton: {
-    backgroundColor: colors.button,
-    borderRadius: 999,
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-  },
-  secondaryText: {
-    fontSize: 17,
-    fontWeight: '500',
-    color: colors.textPrimary,
-  },
-  textButton: {
-    paddingHorizontal: 18,
-    paddingVertical: 15,
-  },
-  textButtonLabel: {
-    fontSize: 17,
-    color: colors.textSecondary,
-  },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: colors.handle,
-    marginBottom: 20,
-  },
-  sheetRow: {
-    flexDirection: 'row',
+    paddingVertical: 16,
     alignItems: 'center',
-    gap: 14,
   },
-  sheetTitle: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: '600',
+  pillPrimary: {
+    backgroundColor: colors.accent,
+  },
+  pillSoft: {
+    backgroundColor: colors.button,
+    borderWidth: 1.5,
+    borderColor: colors.rule,
+  },
+  pillOutline: {
+    borderWidth: 1.5,
+    borderColor: colors.textPrimary,
+  },
+  pillText: {
+    fontSize: 17,
+    fontWeight: '500',
     color: colors.textPrimary,
   },
-  sheetTitleDone: {
-    color: colors.placeholder,
-    textDecorationLine: 'line-through',
+  pillPrimaryText: {
+    color: colors.surface,
   },
   pressed: {
     opacity: 0.7,

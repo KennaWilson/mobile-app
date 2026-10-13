@@ -1,16 +1,35 @@
-import { useRef } from 'react';
-import { PanResponder, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, PanResponder, StyleSheet, View } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import type { ReactNode } from 'react';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { colors } from '../theme/colors';
 
 const SIZE = 250;
-const STROKE = 14;
+const STROKE = 10;
 const KNOB_RADIUS = 13;
 const RADIUS = (SIZE - KNOB_RADIUS * 2 - 4) / 2;
 const CENTER = SIZE / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+const WAVE_COUNT = 44;
+const WAVE_AMPLITUDE = 4;
+const WAVE_STROKE = 5;
+/** Radians per second the ripple travels along the line while the timer runs. */
+const WAVE_SPEED = 4;
+const TICK_PULSE_MS = 300;
+
+function wavyArc(progress: number, wavePhase: number) {
+  const sweep = progress * 2 * Math.PI;
+  const steps = Math.max(2, Math.ceil(progress * 480));
+  let d = '';
+  for (let i = 0; i <= steps; i++) {
+    const angle = (i / steps) * sweep;
+    const r = RADIUS + WAVE_AMPLITUDE * Math.sin(WAVE_COUNT * angle + wavePhase);
+    const x = CENTER + r * Math.sin(angle);
+    const y = CENTER - r * Math.cos(angle);
+    d += `${i === 0 ? 'M' : 'L'}${x.toFixed(2)} ${y.toFixed(2)}`;
+  }
+  return d;
+}
 
 export const DIAL_MAX_MINUTES = 60;
 const STEP_MINUTES = 5;
@@ -21,10 +40,52 @@ type FocusDialProps = {
   /** When provided, the knob can be dragged to pick a duration. */
   onChangeMinutes?: (minutes: number) => void;
   minutes?: number;
+  /** Animate the ripple and pulse the knob each second, so time visibly passes. */
+  running?: boolean;
   children: ReactNode;
 };
 
-export default function FocusDial({ progress, onChangeMinutes, minutes, children }: FocusDialProps) {
+function useRunningClock(running: boolean) {
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+  }, []);
+
+  useEffect(() => {
+    if (!running || reduceMotion) return;
+    let frame = 0;
+    let last: number | null = null;
+    const step = (now: number) => {
+      if (last !== null) {
+        const delta = now - last;
+        setElapsedMs((current) => current + delta);
+      }
+      last = now;
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [running, reduceMotion]);
+
+  return elapsedMs;
+}
+
+export default function FocusDial({
+  progress,
+  onChangeMinutes,
+  minutes,
+  running = false,
+  children,
+}: FocusDialProps) {
+  const elapsedMs = useRunningClock(running);
+  const wavePhase = ((elapsedMs / 1000) * WAVE_SPEED) % (2 * Math.PI);
+  const sinceTick = elapsedMs % 1000;
+  const knobRadius =
+    running && sinceTick < TICK_PULSE_MS
+      ? KNOB_RADIUS + 3 * (1 - sinceTick / TICK_PULSE_MS)
+      : KNOB_RADIUS;
   const viewRef = useRef<View>(null);
   const origin = useRef({ x: 0, y: 0 });
   const latest = useRef({ onChangeMinutes, minutes });
@@ -80,21 +141,20 @@ export default function FocusDial({ progress, onChangeMinutes, minutes, children
           strokeWidth={STROKE}
           fill="none"
         />
-        <Circle
-          cx={CENTER}
-          cy={CENTER}
-          r={RADIUS}
-          stroke={colors.accent}
-          strokeWidth={STROKE}
-          strokeLinecap="round"
-          fill="none"
-          strokeDasharray={`${CIRCUMFERENCE * clamped} ${CIRCUMFERENCE}`}
-          transform={`rotate(-90 ${CENTER} ${CENTER})`}
-        />
+        {clamped > 0 && (
+          <Path
+            d={wavyArc(clamped, wavePhase)}
+            stroke={colors.accent}
+            strokeWidth={WAVE_STROKE}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        )}
         <Circle
           cx={knobX}
           cy={knobY}
-          r={KNOB_RADIUS}
+          r={knobRadius}
           fill={colors.surface}
           stroke={colors.accent}
           strokeWidth={4}

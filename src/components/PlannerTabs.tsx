@@ -1,37 +1,55 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors } from '../theme/colors';
+import type { StyleProp, ViewStyle } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { colors, tabTints } from '../theme/colors';
 
 export type PlannerTab = 'task' | 'list' | 'schedule';
 
-const TABS: { key: PlannerTab; label: string; tint: string }[] = [
-  { key: 'task', label: 'Task', tint: '#E6E4F3' },
-  { key: 'list', label: 'List', tint: '#F4E7D9' },
-  { key: 'schedule', label: 'Schedule', tint: '#DFEDE4' },
+const TABS: { key: PlannerTab; label: string; icon: keyof typeof Feather.glyphMap }[] = [
+  { key: 'task', label: 'Task', icon: 'check-square' },
+  { key: 'list', label: 'List', icon: 'list' },
+  { key: 'schedule', label: 'Schedule', icon: 'calendar' },
 ];
 
 type PlannerTabsProps = {
   active: PlannerTab;
   onChange: (tab: PlannerTab) => void;
+  /** "label" tabs sit on top of a white sheet; "icon" tabs sit on a ruled line over the page. */
+  variant?: 'label' | 'icon';
+  style?: StyleProp<ViewStyle>;
 };
 
-export default function PlannerTabs({ active, onChange }: PlannerTabsProps) {
+export default function PlannerTabs({ active, onChange, variant = 'label', style }: PlannerTabsProps) {
+  const isIcon = variant === 'icon';
   return (
-    <View accessibilityRole="tablist" style={styles.row}>
+    <View accessibilityRole="tablist" style={[styles.row, style]}>
       {TABS.map((tab) => {
         const selected = tab.key === active;
+        const selectedBackground = isIcon ? colors.background : colors.surface;
         return (
           <Pressable
             key={tab.key}
             accessibilityRole="tab"
+            accessibilityLabel={tab.label}
             accessibilityState={{ selected }}
             onPress={() => onChange(tab.key)}
             style={[
               styles.tab,
-              { backgroundColor: selected ? colors.surface : tab.tint },
+              isIcon && styles.iconTab,
+              { backgroundColor: selected ? selectedBackground : tabTints[tab.key] },
               selected && styles.tabSelected,
+              isIcon && selected && styles.iconTabSelected,
             ]}
           >
-            <Text style={[styles.label, selected && styles.labelSelected]}>{tab.label}</Text>
+            {isIcon ? (
+              <Feather
+                name={tab.icon}
+                size={17}
+                color={selected ? colors.textPrimary : colors.textSecondary}
+              />
+            ) : (
+              <Text style={[styles.label, selected && styles.labelSelected]}>{tab.label}</Text>
+            )}
           </Pressable>
         );
       })}
@@ -58,6 +76,16 @@ const styles = StyleSheet.create({
   tabSelected: {
     paddingTop: 11,
     paddingBottom: 9,
+  },
+  iconTab: {
+    paddingHorizontal: 13,
+    borderWidth: 1.5,
+    borderColor: colors.rule,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+  },
+  iconTabSelected: {
+    borderBottomColor: colors.background,
   },
   label: {
     fontSize: 15,

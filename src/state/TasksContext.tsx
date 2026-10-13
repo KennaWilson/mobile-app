@@ -1,9 +1,12 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
+export type TaskKind = 'task' | 'schedule';
+
 export type Task = {
   id: string;
   title: string;
+  kind: TaskKind;
   minutes: number;
   done: boolean;
 };
@@ -18,17 +21,17 @@ const DEFAULT_TASK_MINUTES = 25;
 
 type TasksContextValue = {
   tasks: Task[];
-  addFromText: (text: string) => void;
+  addTasks: (titles: string[], kind: TaskKind) => void;
   toggleTask: (id: string) => void;
   setTaskMinutes: (id: string, minutes: number) => void;
   listItems: ListItem[];
-  addListItems: (text: string) => void;
+  addListItems: (texts: string[]) => void;
   toggleListItem: (id: string) => void;
 };
 
 const TasksContext = createContext<TasksContextValue | null>(null);
 
-function splitLines(text: string) {
+export function splitLines(text: string) {
   return text
     .split('\n')
     .map((line) => line.trim())
@@ -39,19 +42,6 @@ function makeId(index: number) {
   return `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function createTasks(text: string): Task[] {
-  return splitLines(text).map((title, index) => ({
-    id: makeId(index),
-    title,
-    minutes: DEFAULT_TASK_MINUTES,
-    done: false,
-  }));
-}
-
-function createListItems(text: string): ListItem[] {
-  return splitLines(text).map((line, index) => ({ id: makeId(index), text: line, done: false }));
-}
-
 export function TasksProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [listItems, setListItems] = useState<ListItem[]>([]);
@@ -59,7 +49,17 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const value = useMemo<TasksContextValue>(
     () => ({
       tasks,
-      addFromText: (text) => setTasks((current) => [...current, ...createTasks(text)]),
+      addTasks: (titles, kind) =>
+        setTasks((current) => [
+          ...current,
+          ...titles.map((title, index) => ({
+            id: makeId(index),
+            title,
+            kind,
+            minutes: DEFAULT_TASK_MINUTES,
+            done: false,
+          })),
+        ]),
       toggleTask: (id) =>
         setTasks((current) =>
           current.map((task) => (task.id === id ? { ...task, done: !task.done } : task)),
@@ -69,8 +69,11 @@ export function TasksProvider({ children }: { children: ReactNode }) {
           current.map((task) => (task.id === id ? { ...task, minutes } : task)),
         ),
       listItems,
-      addListItems: (text) =>
-        setListItems((current) => [...current, ...createListItems(text)]),
+      addListItems: (texts) =>
+        setListItems((current) => [
+          ...current,
+          ...texts.map((text, index) => ({ id: makeId(index), text, done: false })),
+        ]),
       toggleListItem: (id) =>
         setListItems((current) =>
           current.map((item) => (item.id === id ? { ...item, done: !item.done } : item)),
