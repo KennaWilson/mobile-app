@@ -3,13 +3,15 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AddSheet from '../components/AddSheet';
+import AmbientBackground from '../components/AmbientBackground';
+import ConnectCarousel from '../components/ConnectCarousel';
 import PlanCard from '../components/PlanCard';
 import PlannerTabs, { type PlannerTab } from '../components/PlannerTabs';
 import PlannerTransition from '../components/PlannerTransition';
+import TaskBoard from '../components/TaskBoard';
 import TaskPromptCard from '../components/TaskPromptCard';
-import { useTasks } from '../state/TasksContext';
+import { useTasks, type TaskDetails } from '../state/TasksContext';
 import { colors, noteColors } from '../theme/colors';
-import { formatMinutes } from '../utils/date';
 
 const USER_NAME = 'McKenna';
 
@@ -33,13 +35,20 @@ export default function HomeScreen() {
   const [flippingTo, setFlippingTo] = useState<PlannerTab | null>(null);
   const { tasks, addTasks, toggleTask, listItems, addListItems, toggleListItem } = useTasks();
 
-  const save = (tab: PlannerTab, lines: string[]) => {
-    if (tab === 'list') addListItems(lines);
-    else addTasks(lines, tab);
-    setView(tab);
+  const save = (tab: PlannerTab, lines: string[], details?: TaskDetails) => {
+    if (tab === 'list') {
+      addListItems(lines);
+      setView('list');
+      setFlippingTo('list');
+    } else {
+      const answers = details ?? { minutes: 25, type: tab === 'schedule' ? 'event' : 'task', due: 'today' as const, priority: 'should' as const };
+      addTasks(lines, answers);
+      const nextView: PlannerTab = answers.type === 'event' ? 'schedule' : 'task';
+      setView(nextView);
+      setFlippingTo(nextView);
+    }
     setDraft('');
     setExpanded(false);
-    setFlippingTo(tab);
   };
 
   useFocusEffect(
@@ -50,9 +59,16 @@ export default function HomeScreen() {
 
   const bottomPadding = Math.max(insets.bottom, 16);
 
+  const renderEmpty = (message: string) => (
+    <View>
+      <Text style={styles.empty}>{message}</Text>
+      <ConnectCarousel />
+    </View>
+  );
+
   const renderCards = () => {
     if (view === 'list') {
-      if (listItems.length === 0) return <Text style={styles.empty}>{EMPTY_COPY.list}</Text>;
+      if (listItems.length === 0) return renderEmpty(EMPTY_COPY.list);
       return listItems.map((item, index) => (
         <PlanCard
           key={item.id}
@@ -68,19 +84,18 @@ export default function HomeScreen() {
     }
 
     const visible = tasks.filter((task) => task.kind === view);
-    if (visible.length === 0) return <Text style={styles.empty}>{EMPTY_COPY[view]}</Text>;
-    const upNextId = visible.find((task) => !task.done)?.id;
+    if (view === 'task') {
+      if (visible.length === 0) return renderEmpty(EMPTY_COPY.task);
+      return <TaskBoard tasks={visible} onToggle={toggleTask} />;
+    }
+    if (visible.length === 0) return renderEmpty(EMPTY_COPY[view]);
     return visible.map((task, index) => (
       <PlanCard
         key={task.id}
         title={task.title}
         noteColor={noteColors[index % noteColors.length]}
         done={task.done}
-        eyebrow={task.id === upNextId ? 'UP NEXT' : undefined}
-        details={[
-          task.done ? 'Done' : view === 'schedule' ? 'Scheduled today' : 'Anytime this week',
-          `${formatMinutes(task.minutes)} focus`,
-        ]}
+        details={[task.done ? 'Done' : 'Scheduled today']}
         openLabel={`Focus on ${task.title}`}
         onOpen={() => router.push(`/focus/${task.id}`)}
         onToggle={() => toggleTask(task.id)}
@@ -93,9 +108,12 @@ export default function HomeScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <AmbientBackground />
       <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
+        <View style={styles.tabRule}>
+          <PlannerTabs active={view} onChange={setView} variant="icon" style={styles.tabs} />
+        </View>
         <Text style={styles.title}>Review your week</Text>
-        <PlannerTabs active={view} onChange={setView} variant="icon" style={styles.tabs} />
       </View>
 
       <ScrollView
@@ -108,6 +126,7 @@ export default function HomeScreen() {
 
       {expanded ? (
         <AddSheet
+          name={USER_NAME}
           draft={draft}
           onChangeDraft={setDraft}
           bottomPadding={bottomPadding}
@@ -143,31 +162,34 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
     marginHorizontal: 20,
+    zIndex: 1,
+  },
+  tabRule: {
     borderBottomWidth: 1.5,
-    borderBottomColor: colors.rule,
+    borderBottomColor: '#24315C',
+  },
+  scroll: {
+    flex: 1,
+    zIndex: 1,
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
     color: colors.textPrimary,
     letterSpacing: -0.3,
-    paddingBottom: 10,
+    paddingTop: 14,
+    paddingBottom: 0,
   },
   tabs: {
+    alignSelf: 'flex-end',
     paddingHorizontal: 0,
     gap: 4,
     marginBottom: -1.5,
   },
-  scroll: {
-    flex: 1,
-  },
   content: {
     paddingHorizontal: 20,
-    paddingTop: 30,
+    paddingTop: 22,
     paddingBottom: 24,
   },
   empty: {

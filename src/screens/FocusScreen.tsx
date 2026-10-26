@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Checkbox from '../components/Checkbox';
 import FocusDial, { DIAL_MAX_MINUTES } from '../components/FocusDial';
 import SteamingCup from '../components/SteamingCup';
-import { useTasks } from '../state/TasksContext';
+import { formatDue, formatPriority, formatTaskType, useTasks } from '../state/TasksContext';
 import { colors } from '../theme/colors';
 import { formatMinutes } from '../utils/date';
 
@@ -108,8 +108,8 @@ export default function FocusScreen({ taskId }: { taskId: string }) {
         {detailsOpen && (
           <View style={styles.details}>
             <Text style={styles.detailText}>
-              {task.kind === 'schedule' ? 'Scheduled today' : 'Anytime this week'} ·{' '}
-              {formatMinutes(task.minutes)} focus
+              {formatTaskType(task.type)} · {formatDue(task.due, task.dueCustom)} ·{' '}
+              {formatMinutes(task.minutes)} · {formatPriority(task.priority)}
             </Text>
             <View style={styles.detailRow}>
               <Checkbox checked={task.done} label={`Mark ${task.title} done`} onToggle={toggleDone} />

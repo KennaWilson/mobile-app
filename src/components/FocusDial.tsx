@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, PanResponder, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, PanResponder, Platform, StyleSheet, View } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import type { ReactNode } from 'react';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -16,6 +16,7 @@ const WAVE_STROKE = 5;
 /** Radians per second the ripple travels along the line while the timer runs. */
 const WAVE_SPEED = 4;
 const TICK_PULSE_MS = 300;
+const useNativeDriver = Platform.OS !== 'web';
 
 function wavyArc(progress: number, wavePhase: number) {
   const sweep = progress * 2 * Math.PI;
@@ -86,10 +87,32 @@ export default function FocusDial({
     running && sinceTick < TICK_PULSE_MS
       ? KNOB_RADIUS + 3 * (1 - sinceTick / TICK_PULSE_MS)
       : KNOB_RADIUS;
+  const glow = useRef(new Animated.Value(0)).current;
   const viewRef = useRef<View>(null);
   const origin = useRef({ x: 0, y: 0 });
   const latest = useRef({ onChangeMinutes, minutes });
   latest.current = { onChangeMinutes, minutes };
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, {
+          toValue: 1,
+          duration: 1800,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver,
+        }),
+        Animated.timing(glow, {
+          toValue: 0,
+          duration: 1800,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [glow]);
 
   const measure = () => {
     viewRef.current?.measureInWindow((x, y) => {
@@ -130,9 +153,49 @@ export default function FocusDial({
   const knobX = CENTER + RADIUS * Math.cos(knobAngle);
   const knobY = CENTER + RADIUS * Math.sin(knobAngle);
 
+  const ringGlow = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.35, 0.85],
+  });
+
   return (
     <View ref={viewRef} onLayout={measure} style={styles.dial} {...panResponder.panHandlers}>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.halo,
+          {
+            opacity: ringGlow,
+            transform: [
+              {
+                scale: glow.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.97, 1.04],
+                }),
+              },
+            ],
+          },
+        ]}
+      />
       <Svg width={SIZE} height={SIZE}>
+        <Circle
+          cx={CENTER}
+          cy={CENTER}
+          r={RADIUS}
+          stroke="#8EB4F0"
+          strokeWidth={22}
+          strokeOpacity={0.22}
+          fill="none"
+        />
+        <Circle
+          cx={CENTER}
+          cy={CENTER}
+          r={RADIUS}
+          stroke="#B7CCF6"
+          strokeWidth={14}
+          strokeOpacity={0.45}
+          fill="none"
+        />
         <Circle
           cx={CENTER}
           cy={CENTER}
@@ -141,6 +204,17 @@ export default function FocusDial({
           strokeWidth={STROKE}
           fill="none"
         />
+        {clamped > 0 && (
+          <Path
+            d={wavyArc(clamped, wavePhase)}
+            stroke="#8EB4F0"
+            strokeWidth={14}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeOpacity={0.35}
+            fill="none"
+          />
+        )}
         {clamped > 0 && (
           <Path
             d={wavyArc(clamped, wavePhase)}
@@ -171,6 +245,21 @@ const styles = StyleSheet.create({
   dial: {
     width: SIZE,
     height: SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  halo: {
+    position: 'absolute',
+    width: RADIUS * 2 + 18,
+    height: RADIUS * 2 + 18,
+    borderRadius: RADIUS + 9,
+    borderWidth: 8,
+    borderColor: 'rgba(142, 180, 240, 0.55)',
+    backgroundColor: 'transparent',
+    shadowColor: '#7EA8F0',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.95,
+    shadowRadius: 22,
   },
   center: {
     position: 'absolute',
